@@ -2,10 +2,12 @@ const Batch = require('../models/batch.model');
 const Product = require('../models/product.model');
 const mongoose = require('mongoose');
 const AppError = require('../utils/AppError');
-const sendResponse = require('../utils/sendResponse');
+const sendResponse = require('../utils/response');
 
 
 exports.createBatch = async(req,res,next)=>{
+    const session = await mongoose.startSession();
+    session.startTransaction();
     try{
         const {productId , quantity,expiryDate} = req.body;
         const shopkeeperId =  req.user._id;
@@ -24,8 +26,8 @@ exports.createBatch = async(req,res,next)=>{
             return next(new AppError('Product not Found',404));
         }
 
-        const batch = new Batch.create([{
-            product : productId,
+        const batch = await Batch.create([{
+            Product : productId,
             shopkeeper : shopkeeperId,
             quantity,
             remainingQty : quantity,
