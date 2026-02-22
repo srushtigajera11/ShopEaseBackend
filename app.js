@@ -12,6 +12,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoute);
 app.use('/api/product',productRoute);
 app.use('/api/order',orderRoute);
+app.use("/api/batches", require("./routes/batch.route"));
 
 app.get("/", (req, res) => {
     res.send("shopEase API is running");

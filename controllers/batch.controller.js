@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const AppError = require('../utils/AppError');
 const sendResponse = require('../utils/sendResponse');
 
+
 exports.createBatch = async(req,res,next)=>{
     try{
         const {productId , quantity,expiryDate} = req.body;

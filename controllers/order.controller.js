@@ -3,69 +3,69 @@ const Product = require("../models/product.model");
 const mongoose = require("mongoose");
 const sendResponse = require('../utils/response');
 const AppError = require('../utils/AppError');
+const sellFromBatches = require("../utils/sellFromBatches");
 
 //create order
-exports.createOrder = async (req,res,next)=>{
+exports.createOrder = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  try{
+  try {
     const { items } = req.body;
+    const customerId = req.user._id;
 
-    if(!items || items.length === 0){
-      return next(new AppError("Order items required",400));
+    if (!items || items.length === 0) {
+      throw new AppError("Order items required", 400);
     }
 
     let totalAmount = 0;
     const orderItems = [];
 
-    for(const item of items){
-
-      if(item.quantity <= 0){
-        return next(new AppError("Quantity must be greater than zero",400));
-      }
-
+    for (const item of items) {
       const product = await Product.findById(item.productId).session(session);
 
-      if(!product){
-        return next(new AppError("Product not found",404));
+      if (!product) {
+        throw new AppError("Product not found", 404);
       }
 
-      if(product.stock < item.quantity){
-        return next(new AppError(`Insufficient stock for ${product.productName}`,400));
-      }
-
-      // deduct stock
-      product.stock -= item.quantity;
-      await product.save({session});
+      // ⭐ Deduct from batches using FIFO expiry
+      await sellFromBatches(product._id, item.quantity, session);
 
       const itemTotal = product.price * item.quantity;
       totalAmount += itemTotal;
 
       orderItems.push({
-        productId: product._id,
+        product: product._id,
+        quantity: item.quantity,
         price: product.price,
-        quantity: item.quantity
       });
     }
 
-    const order = await Order.create([{
-      customerId: req.user._id,
-      items: orderItems,
-      totalAmount
-    }], { session });
+    const order = await Order.create(
+      [
+        {
+          customer: customerId,
+          items: orderItems,
+          totalAmount,
+        },
+      ],
+      { session }
+    );
 
     await session.commitTransaction();
     session.endSession();
 
-    return sendResponse(res,201,"Order placed successfully",order[0]);
-
-  }catch(err){
+    res.status(201).json({
+      success: true,
+      message: "Order placed successfully",
+      order: order[0],
+    });
+  } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    next(err);
+    next(error);
   }
-}
+};
 
 
 //get my orderS(customer)
