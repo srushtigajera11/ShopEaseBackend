@@ -18,6 +18,8 @@ const userSchema = new mongoose.Schema({
     deliveryAddress : {type:String},
     refreshToken: {
             type: String
-        }
+        },
+        isActive: { type: Boolean, default: true },
+isDelete: { type: Boolean, default: false }
 },{timestamps:true});
 module.exports = mongoose.model('User',userSchema);

@@ -30,6 +30,8 @@ const batchSchema = new mongoose.Schema({
         enum : ['active','expired','depleted'],
         default :'active'
     },
+    isActive: { type: Boolean, default: true },
+    isDelete: { type: Boolean, default: false }
 },{timestamps : true});
 batchSchema.index({ product: 1, expiryDate: 1 });
 

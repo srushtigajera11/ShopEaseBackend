@@ -9,6 +9,6 @@ router.get('/all',protect,productController.getAllProducts);
 router.get('/:id',protect,productController.getProductById);
 router.put('/:id',protect,authorize('shopkeeper'),productController.updateProduct);
 router.delete('/:id',protect,authorize('shopkeeper'),productController.deleteProduct);
-router.patch('/:id/stock',protect,authorize('shopkeeper'),productController.updateStock);
+// router.patch('/:id/stock',protect,authorize('shopkeeper'),productController.updateStock);
 
 module.exports = router;

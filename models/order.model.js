@@ -31,7 +31,9 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: ["pending", "completed"],
     default: "pending"
-  }
+  },
+  isActive: { type: Boolean, default: true },
+isDelete: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Order", orderSchema);

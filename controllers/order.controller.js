@@ -132,3 +132,21 @@ exports.updateOrderStatus = async(req,res,next)=>{
         next(err);
     }
 }
+
+exports.deleteOrder = async(req,res,next)=>{
+  try{
+    const order = await Order.findById(req.params.id);
+    if(!order){
+      sendResponse(res,404,false,"Order not found");
+    }
+    if(order.customerId.toString() !== req.user._id.toString()){
+      return next(new AppError("Unauthorized",403));
+    }
+    order.isActive = false;
+    order.isDelete = true;
+    await order.save();
+    return sendResponse(res,200,true,"Order deleted successfully");
+  }catch(err){
+    next(err);
+  }
+}

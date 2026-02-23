@@ -63,28 +63,28 @@ exports.deleteProduct = async(req,res,next)=>{
     if(product.shopkeeperId.toString() !== req.user._id.toString()){
     return next(new AppError("Unauthorized",403));
     }
-
-    await product.deleteOne();
-
-        return sendResponse(res,200,"Product deleted successfully",null);
+     product.isActive = false;
+     product.isDelete = true;
+    await product.save();
+    return sendResponse(res,200,"Product deleted successfully",null);
     }catch(err){
         next(err);
     }
 }
-exports.updateStock = async(req,res,next)=>{
-    try{
-        const {stock} = req.body;
-        const product = await Product.findById(req.params.id);
-        if(!product){
-            return next(new AppError("Product not found", 404));
-        }
-        if(product.shopkeeperId.toString() !== req.user._id.toString()){
-            return next(new AppError("Unauthorized", 403));
-        }
-         product.stock += stock;
-        await product.save();
-        return sendResponse(res,200,"Stock updated successfully",product);
-    }catch(err){
-        next(err);
-    }
-}
+// exports.updateStock = async(req,res,next)=>{
+//     try{
+//         const {stock} = req.body;
+//         const product = await Product.findById(req.params.id);
+//         if(!product){
+//             return next(new AppError("Product not found", 404));
+//         }
+//         if(product.shopkeeperId.toString() !== req.user._id.toString()){
+//             return next(new AppError("Unauthorized", 403));
+//         }
+//          product.stock += stock;
+//         await product.save();
+//         return sendResponse(res,200,"Stock updated successfully",product);
+//     }catch(err){
+//         next(err);
+//     }
+// }
