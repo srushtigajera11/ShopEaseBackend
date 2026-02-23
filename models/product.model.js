@@ -25,4 +25,11 @@ isDelete: { type: Boolean, default: false },
     required:true
   }
 },{timestamps:true});
+productSchema.pre("findOneAndDelete", function () {
+  throw new Error("Hard delete not allowed");
+});
+
+productSchema.pre("deleteOne", function () {
+  throw new Error("Hard delete not allowed");
+});
 module.exports = mongoose.model('Product',productSchema);

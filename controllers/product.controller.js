@@ -1,90 +1,208 @@
-const Product = require('../models/product.model'); 
-const sendResponse  = require('../utils/response');   
-const AppError = require('../utils/AppError');
-const { response } = require('express');
+const mongoose = require("mongoose");
+const Product = require("../models/product.model");
+const Batch = require("../models/batch.model");
+const sendResponse = require("../utils/response");
+const AppError = require("../utils/AppError");
+
+
+/* =========================================
+   CREATE PRODUCT (Shopkeeper)
+========================================= */
 exports.createProduct = async (req, res, next) => {
-    try {
-        //check for duplicate product name for the same shopkeeper
-        const {productName,description,price,stock} = req.body;
-        const product = await Product.create({productName,description,price,stock,shopkeeperId:req.user._id});
-        return sendResponse(res,201,"Product created successfully",product);
-    }catch(err){
-        next(err);
-    }
-}
+  try {
+    const { productName, description, price } = req.body;
 
-exports.getAllProducts = async(req,res,next)=>{
-    try{
-        const products = await Product.find();
-        return sendResponse(res,200,"products fetched successfully",products);
-    }catch(err){
-        next(err);
+    if (!productName || !price) {
+      throw new AppError("Product name and price are required", 400);
     }
-}
 
-exports.getProductById = async(req,res,next)=>{
-    try{
-        const product = await Product.findById(req.params.id);
-        if(!product){
-          return next(new AppError("Product not found", 404)); 
-        }
-        return sendResponse(res,200,"Product fetched successfully",product);
-    }catch(err){
-        next(err);
+    const exists = await Product.findOne({
+      productName,
+      shopkeeperId: req.user._id,
+      isDelete: false,
+    });
+
+    if (exists) {
+      throw new AppError("Product already exists", 400);
     }
-}
 
-exports.updateProduct = async(req,res,next)=>{
-    try{
-        const {productName,description,price,stock} = req.body;
-        const product = await Product.findById(req.params.id);
-        if(!product){
-          return next(new AppError("Product not found", 404)); 
-        }
-        if(product.shopkeeperId.toString() !== req.user._id.toString()){
-            return next(new AppError("Unauthorized", 403)); 
-        }
-        product.productName = productName || product.productName;
-        product.description = description || product.description;
-        product.price = price || product.price;
-        product.stock = stock || product.stock;
-        await product.save();
-        return sendResponse(res,200,"Product updated successfully",product);
-    }catch(err){
-        next(err);
+    const product = await Product.create({
+      productName,
+      description,
+      price,
+      shopkeeperId: req.user._id,
+    });
+
+    return sendResponse(res, 201, "Product created successfully", product);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+/* =========================================
+   GET ALL PRODUCTS
+   (Customer → all active products)
+   (Shopkeeper → only own products)
+========================================= */
+exports.getAllProducts = async (req, res, next) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      minPrice,
+      maxPrice,
+      sortKey,
+      sortOrder,
+    } = req.query;
+
+    const match = {
+      isActive: true,
+      isDelete: false,
+    };
+
+    // shopkeeper sees only own products
+    if (req.user.role === "shopkeeper") {
+      match.shopkeeperId = req.user._id;
     }
-}
 
-exports.deleteProduct = async(req,res,next)=>{
-    try{
-       const product = await Product.findById(req.params.id);
-    if(!product) return next(new AppError("Product not found",404));
-
-    if(product.shopkeeperId.toString() !== req.user._id.toString()){
-    return next(new AppError("Unauthorized",403));
+    // price filter
+    if (minPrice || maxPrice) {
+      match.price = {};
+      if (minPrice) match.price.$gte = Number(minPrice);
+      if (maxPrice) match.price.$lte = Number(maxPrice);
     }
-     product.isActive = false;
-     product.isDelete = true;
+
+    const pipeline = [{ $match: match }];
+
+    // search
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { productName: { $regex: search, $options: "i" } },
+            { description: { $regex: search, $options: "i" } },
+          ],
+        },
+      });
+    }
+
+    // sorting
+    const sortField = sortKey || "createdAt";
+    const order = sortOrder === "asc" ? 1 : -1;
+    pipeline.push({ $sort: { [sortField]: order } });
+
+    // pagination
+    const skip = (page - 1) * limit;
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: Number(limit) });
+
+    const products = await Product.aggregate(pipeline);
+
+    return sendResponse(res, 200, "Products fetched", products);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+/* =========================================
+   GET PRODUCT BY ID
+========================================= */
+exports.getProductById = async (req, res, next) => {
+  try {
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isActive: true,
+      isDelete: false,
+    });
+
+    if (!product) {
+      throw new AppError("Product not found", 404);
+    }
+
+    return sendResponse(res, 200, "Product details", product);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+/* =========================================
+   UPDATE PRODUCT (Shopkeeper)
+========================================= */
+exports.updateProduct = async (req, res, next) => {
+  try {
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isActive: true,
+      isDelete: false,
+    });
+
+    if (!product) {
+      throw new AppError("Product not found", 404);
+    }
+
+    if (product.shopkeeperId.toString() !== req.user._id.toString()) {
+      throw new AppError("Unauthorized", 403);
+    }
+
+    const { productName, description, price } = req.body;
+
+    if (productName) product.productName = productName;
+    if (description) product.description = description;
+    if (price) product.price = price;
+
     await product.save();
-    return sendResponse(res,200,"Product deleted successfully",null);
-    }catch(err){
-        next(err);
+
+    return sendResponse(res, 200, "Product updated successfully", product);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+/* =========================================
+   DELETE PRODUCT (Soft Delete)
+========================================= */
+exports.deleteProduct = async (req, res, next) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      throw new AppError("Product not found", 404);
     }
-}
-// exports.updateStock = async(req,res,next)=>{
-//     try{
-//         const {stock} = req.body;
-//         const product = await Product.findById(req.params.id);
-//         if(!product){
-//             return next(new AppError("Product not found", 404));
-//         }
-//         if(product.shopkeeperId.toString() !== req.user._id.toString()){
-//             return next(new AppError("Unauthorized", 403));
-//         }
-//          product.stock += stock;
-//         await product.save();
-//         return sendResponse(res,200,"Stock updated successfully",product);
-//     }catch(err){
-//         next(err);
-//     }
-// }
+
+    if (product.shopkeeperId.toString() !== req.user._id.toString()) {
+      throw new AppError("Unauthorized", 403);
+    }
+
+    // prevent delete if stock still exists
+    const activeBatch = await Batch.exists({
+      Product: product._id,
+      remainingQty: { $gt: 0 },
+      isDelete: false,
+    });
+
+    if (activeBatch) {
+      throw new AppError(
+        "Cannot delete product with remaining stock",
+        400
+      );
+    }
+
+    product.isActive = false;
+    product.isDelete = true;
+
+    await product.save();
+
+    return sendResponse(res, 200, "Product deleted successfully");
+  } catch (err) {
+    next(err);
+  }
+};

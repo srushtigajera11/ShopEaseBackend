@@ -1,11 +1,14 @@
+const mongoose = require("mongoose");
 const Order = require("../models/order.model");
 const Product = require("../models/product.model");
-const mongoose = require("mongoose");
-const sendResponse = require('../utils/response');
-const AppError = require('../utils/AppError');
 const sellFromBatches = require("../utils/sellFromBatches");
+const sendResponse = require("../utils/response");
+const AppError = require("../utils/AppError");
 
-//create order
+
+/* =========================================
+   CREATE ORDER  (Customer)
+========================================= */
 exports.createOrder = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -22,13 +25,21 @@ exports.createOrder = async (req, res, next) => {
     const orderItems = [];
 
     for (const item of items) {
-      const product = await Product.findById(item.productId).session(session);
+      const product = await Product.findOne({
+        _id: item.productId,
+        isActive: true,
+        isDelete: false,
+      }).session(session);
 
       if (!product) {
         throw new AppError("Product not found", 404);
       }
 
-      // ⭐ Deduct from batches using FIFO expiry
+      if (item.quantity <= 0) {
+        throw new AppError("Quantity must be greater than 0", 400);
+      }
+
+      // Deduct stock using FIFO batches
       await sellFromBatches(product._id, item.quantity, session);
 
       const itemTotal = product.price * item.quantity;
@@ -42,24 +53,19 @@ exports.createOrder = async (req, res, next) => {
     }
 
     const order = await Order.create(
-      [
-        {
-          customer: customerId,
-          items: orderItems,
-          totalAmount,
-        },
-      ],
+      [{
+        customer: customerId,
+        items: orderItems,
+        totalAmount,
+      }],
       { session }
     );
 
     await session.commitTransaction();
     session.endSession();
 
-    res.status(201).json({
-      success: true,
-      message: "Order placed successfully",
-      order: order[0],
-    });
+    return sendResponse(res, 201, "Order placed successfully", order[0]);
+
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -68,33 +74,62 @@ exports.createOrder = async (req, res, next) => {
 };
 
 
-//get my orderS(customer)
-exports.getMyOrders = async(req,res,next)=>{
-    try{
-        const orders = await Order.find({customerId:req.user._id});
-        return sendResponse(res,200,"My Orders",orders);
-    }catch(err){
-        next(err);
-    }
-}
 
-//get all orders (shopkeeper)
-exports.getAllOrders = async (req, res, next) => {
+/* =========================================
+   GET MY ORDERS (Customer)
+========================================= */
+exports.getMyOrders = async (req, res, next) => {
   try {
+    const { page = 1, limit = 10, search, status, sortKey, sortOrder } = req.query;
 
-    // find products owned by this shopkeeper
-    const products = await Product.find({ shopkeeperId: req.user._id }).select('_id');
+    const match = {
+      customer: req.user._id,
+      isActive: true,
+      isDelete: false,
+    };
 
-    const productIds = products.map(p => p._id);
+    if (status) {
+      match.status = { $in: status.split(",") };
+    }
 
-    // find orders containing those products
-    const orders = await Order.find({
-      "items.productId": { $in: productIds }
-    })
-    .populate("customerId", "name email")
-    .populate("items.productId", "productName price");
+    const pipeline = [
+      { $match: match },
 
-    return sendResponse(res, 200, "Shopkeeper Orders", orders);
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.product",
+          foreignField: "_id",
+          as: "products",
+        },
+      }
+    ];
+
+    // search
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { status: { $regex: search, $options: "i" } },
+            { "products.productName": { $regex: search, $options: "i" } },
+          ],
+        },
+      });
+    }
+
+    // sorting
+    const sortField = sortKey || "createdAt";
+    const order = sortOrder === "asc" ? 1 : -1;
+    pipeline.push({ $sort: { [sortField]: order } });
+
+    // pagination
+    const skip = (page - 1) * limit;
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: Number(limit) });
+
+    const orders = await Order.aggregate(pipeline);
+
+    return sendResponse(res, 200, "My orders fetched", orders);
 
   } catch (err) {
     next(err);
@@ -102,51 +137,181 @@ exports.getAllOrders = async (req, res, next) => {
 };
 
 
-exports.getOrderById = async(req,res,next)=>{
-    try{
-        const order = await Order.findById(req.params.id);
-        if(!order){
-            return next(new AppError("order not Found",404));
-        }
-        return sendResponse(res,200,"Order Details",order);
-    }catch(err){
-        next(err);
-    }
-}
 
-exports.updateOrderStatus = async(req,res,next)=>{
-    try{
-        const {status} = req.body;
-        if(!["pending","completed"].includes(status)){
-        return next(new AppError("Invalid status",400));
-        }
-        const order = await Order.findById(req.params.id);
-        if(!order){
-            return next(new AppError("order not found",404));
-        }
-        order.status = status;
-        await order.save();
-        return sendResponse(res,200,"Order Status Updated",order);
-    
-    }catch(err){
-        next(err);
-    }
-}
+/* =========================================
+   GET ALL ORDERS (Shopkeeper)
+========================================= */
+exports.getAllOrders = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, search, status, sortKey, sortOrder } = req.query;
 
-exports.deleteOrder = async(req,res,next)=>{
-  try{
-    const order = await Order.findById(req.params.id);
-    if(!order){
-      sendResponse(res,404,false,"Order not found");
+    // find shopkeeper products
+    const products = await Product.find({
+      shopkeeperId: req.user._id,
+      isActive: true,
+      isDelete: false,
+    }).select("_id");
+
+    const productIds = products.map(p => p._id);
+
+    const match = {
+      "items.product": { $in: productIds },
+      isActive: true,
+      isDelete: false,
+    };
+
+    if (status) {
+      match.status = { $in: status.split(",") };
     }
-    if(order.customerId.toString() !== req.user._id.toString()){
-      return next(new AppError("Unauthorized",403));
+
+    const pipeline = [
+      { $match: match },
+
+      {
+        $lookup: {
+          from: "users",
+          localField: "customer",
+          foreignField: "_id",
+          as: "customer",
+        },
+      },
+      { $unwind: "$customer" },
+
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.product",
+          foreignField: "_id",
+          as: "products",
+        },
+      },
+    ];
+
+    // search
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { "customer.name": { $regex: search, $options: "i" } },
+            { "products.productName": { $regex: search, $options: "i" } },
+            { status: { $regex: search, $options: "i" } },
+          ],
+        },
+      });
     }
-    order.isActive = false;
-    order.isDelete = true;
-    await order.save();
-    return sendResponse(res,200,true,"Order deleted successfully");
-  }catch(err){
+
+    // sorting
+    const sortField = sortKey || "createdAt";
+    const order = sortOrder === "asc" ? 1 : -1;
+    pipeline.push({ $sort: { [sortField]: order } });
+
+    // pagination
+    const skip = (page - 1) * limit;
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: Number(limit) });
+
+    const orders = await Order.aggregate(pipeline);
+
+    return sendResponse(res, 200, "Orders fetched", orders);
+
+  } catch (err) {
     next(err);
   }
-}
+};
+
+
+
+/* =========================================
+   GET ORDER BY ID
+========================================= */
+exports.getOrderById = async (req, res, next) => {
+  try {
+    const order = await Order.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(req.params.id),
+          isActive: true,
+          isDelete: false,
+        },
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.product",
+          foreignField: "_id",
+          as: "products",
+        },
+      },
+    ]);
+
+    if (!order.length) {
+      return next(new AppError("Order not found", 404));
+    }
+
+    return sendResponse(res, 200, "Order details", order[0]);
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+/* =========================================
+   UPDATE ORDER STATUS (Shopkeeper)
+========================================= */
+exports.updateOrderStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+
+    if (!["pending", "completed"].includes(status)) {
+      throw new AppError("Invalid status", 400);
+    }
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    order.status = status;
+    await order.save();
+
+    return sendResponse(res, 200, "Order status updated", order);
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+/* =========================================
+   CANCEL ORDER (Customer)
+========================================= */
+exports.cancelOrder = async (req, res, next) => {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      isDelete: false,
+    });
+
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    if (order.customer.toString() !== req.user._id.toString()) {
+      throw new AppError("Unauthorized", 403);
+    }
+
+    order.isActive = false;
+    order.isDelete = true;
+
+    await order.save();
+
+    return sendResponse(res, 200, "Order cancelled successfully");
+
+  } catch (err) {
+    next(err);
+  }
+};

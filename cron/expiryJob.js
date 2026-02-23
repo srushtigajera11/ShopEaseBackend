@@ -7,7 +7,7 @@ const sendEmail = require("../utils/sendEmail");
 
 let isJobRunning = false; // prevents overlapping runs
 
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 0 * * *", async () => {
   if (isJobRunning) return;
   isJobRunning = true;
 

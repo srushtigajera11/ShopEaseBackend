@@ -10,8 +10,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes first
 app.use('/api/auth', authRoute);
-app.use('/api/product',productRoute);
-app.use('/api/order',orderRoute);
+app.use('/api/products',productRoute);
+app.use('/api/orders',orderRoute);
 app.use("/api/batches", require("./routes/batch.route"));
 
 app.get("/", (req, res) => {
@@ -19,6 +19,6 @@ app.get("/", (req, res) => {
 });
 
 // Error middleware LAST
-app.use(errorHandler);
 
+app.use(errorHandler);
 module.exports = app;
