@@ -5,9 +5,7 @@ const sendResponse = require("../utils/response");
 const AppError = require("../utils/AppError");
 
 
-/* =========================================
-   CREATE PRODUCT (Shopkeeper)
-========================================= */
+/* CREATE PRODUCT (Shopkeeper)*/
 exports.createProduct = async (req, res, next) => {
   try {
     const { productName, description, price } = req.body;
@@ -39,13 +37,9 @@ exports.createProduct = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   GET ALL PRODUCTS
+/*  GET ALL PRODUCTS
    (Customer → all active products)
-   (Shopkeeper → only own products)
-========================================= */
+   (Shopkeeper → only own products)*/
 exports.getAllProducts = async (req, res, next) => {
   try {
     const {
@@ -107,11 +101,7 @@ exports.getAllProducts = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   GET PRODUCT BY ID
-========================================= */
+/* GET PRODUCT BY ID*/
 exports.getProductById = async (req, res, next) => {
   try {
     const product = await Product.findOne({
@@ -130,11 +120,7 @@ exports.getProductById = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   UPDATE PRODUCT (Shopkeeper)
-========================================= */
+/* UPDATE PRODUCT (Shopkeeper) */
 exports.updateProduct = async (req, res, next) => {
   try {
     const product = await Product.findOne({
@@ -165,11 +151,7 @@ exports.updateProduct = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   DELETE PRODUCT (Soft Delete)
-========================================= */
+/*  DELETE PRODUCT (Soft Delete) */
 exports.deleteProduct = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);

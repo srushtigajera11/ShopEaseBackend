@@ -5,9 +5,7 @@ const sendResponse = require("../utils/response");
 const AppError = require("../utils/AppError");
 
 
-/* =========================================
-   CREATE BATCH
-========================================= */
+/* CREATE BATCH */
 exports.createBatch = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -62,11 +60,7 @@ exports.createBatch = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   GET ALL BATCHES (Shopkeeper)
-========================================= */
+/* GET ALL BATCHES (Shopkeeper) */
 exports.getAllBatches = async (req, res, next) => {
   try {
     const {
@@ -96,19 +90,32 @@ exports.getAllBatches = async (req, res, next) => {
       match.remainingQty = { $lte: 5 };
     }
 
-    const pipeline = [
-      { $match: match },
+   const pipeline = [
+  { $match: match },
 
-      {
-        $lookup: {
-          from: "products",
-          localField: "Product",
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: "$product" },
-    ];
+  {
+    $lookup: {
+      from: "products",
+      localField: "Product",
+      foreignField: "_id",
+      as: "product",
+    },
+  },
+
+  { $unwind: "$product" },
+
+  {
+    $project: {
+      _id: 1,
+      quantity: 1,
+      remainingQty: 1,
+      expiryDate: 1,
+      createdAt: 1,
+      productName: "$product.productName",
+      price: "$product.price",
+    },
+  }
+];
 
     // expiring soon filter (within 7 days)
     if (expiringSoon === "true") {
@@ -125,15 +132,15 @@ exports.getAllBatches = async (req, res, next) => {
 
     // search by product name
     if (search) {
-      pipeline.push({
-        $match: {
-          "product.productName": {
-            $regex: search,
-            $options: "i",
-          },
-        },
-      });
+  pipeline.push({
+    $match: {
+      $or: [
+        { productName: { $regex: search, $options: "i" } },
+        { price: isNaN(search) ? undefined : Number(search) }
+      ]
     }
+  });
+}
 
     // sorting
     const sortField = sortKey || "createdAt";
@@ -156,9 +163,7 @@ exports.getAllBatches = async (req, res, next) => {
 
 
 
-/* =========================================
-   GET BATCH BY ID
-========================================= */
+/* GET BATCH BY ID*/
 exports.getBatchById = async (req, res, next) => {
   try {
     const batch = await Batch.aggregate([
@@ -191,11 +196,7 @@ exports.getBatchById = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   DELETE BATCH (Soft Delete)
-========================================= */
+/* DELETE BATCH (Soft Delete) */
 exports.deleteBatch = async (req, res, next) => {
   try {
     const batch = await Batch.findOne({
@@ -207,14 +208,12 @@ exports.deleteBatch = async (req, res, next) => {
     if (!batch) {
       throw new AppError("Batch not found", 404);
     }
-
-    // prevent delete if stock still available
-    if (batch.remainingQty > 0) {
-      throw new AppError(
-        "Cannot delete batch with remaining stock",
-        400
-      );
-    }
+    // if (batch.remainingQty > 0) {
+    //   throw new AppError(
+    //     "Cannot delete batch with remaining stock",
+    //     400
+    //   );
+    // }
 
     batch.isDelete = true;
     batch.isActive = false;

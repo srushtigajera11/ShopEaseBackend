@@ -6,9 +6,7 @@ const sendResponse = require("../utils/response");
 const AppError = require("../utils/AppError");
 
 
-/* =========================================
-   CREATE ORDER  (Customer)
-========================================= */
+/* CREATE ORDER  (Customer) */
 exports.createOrder = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -73,11 +71,7 @@ exports.createOrder = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   GET MY ORDERS (Customer)
-========================================= */
+/* GET MY ORDERS (Customer) */
 exports.getMyOrders = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, status, sortKey, sortOrder } = req.query;
@@ -136,11 +130,7 @@ exports.getMyOrders = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   GET ALL ORDERS (Shopkeeper)
-========================================= */
+/* GET ALL ORDERS (Shopkeeper) */
 exports.getAllOrders = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, status, sortKey, sortOrder } = req.query;
@@ -165,34 +155,58 @@ exports.getAllOrders = async (req, res, next) => {
     }
 
     const pipeline = [
-      { $match: match },
+  { $match: match },
 
-      {
-        $lookup: {
-          from: "users",
-          localField: "customer",
-          foreignField: "_id",
-          as: "customer",
-        },
-      },
-      { $unwind: "$customer" },
+  // join customer info
+  {
+    $lookup: {
+      from: "users",
+      localField: "customer",
+      foreignField: "_id",
+      as: "customer",
+    },
+  },
+  { $unwind: "$customer" },
 
-      {
-        $lookup: {
-          from: "products",
-          localField: "items.product",
-          foreignField: "_id",
-          as: "products",
-        },
-      },
-    ];
+  // join product info
+  {
+    $lookup: {
+      from: "products",
+      localField: "items.product",
+      foreignField: "_id",
+      as: "products",
+    },
+  },
+  {
+    $project: {
+      _id: 1,
+      totalAmount: 1,
+      status: 1,
+      createdAt: 1,
+
+      customerName: "$customer.name",
+      customerEmail: "$customer.email",
+
+      products: {
+        $map: {
+          input: "$products",
+          as: "p",
+          in: {
+            productName: "$$p.productName",
+            price: "$$p.price"
+          }
+        }
+      }
+    }
+  }
+];
 
     // search
     if (search) {
       pipeline.push({
         $match: {
           $or: [
-            { "customer.name": { $regex: search, $options: "i" } },
+            { customerName: { $regex: search, $options: "i" } },
             { "products.productName": { $regex: search, $options: "i" } },
             { status: { $regex: search, $options: "i" } },
           ],
@@ -219,11 +233,7 @@ exports.getAllOrders = async (req, res, next) => {
   }
 };
 
-
-
-/* =========================================
-   GET ORDER BY ID
-========================================= */
+/* GET ORDER BY ID*/
 exports.getOrderById = async (req, res, next) => {
   try {
     const order = await Order.aggregate([
@@ -257,9 +267,7 @@ exports.getOrderById = async (req, res, next) => {
 
 
 
-/* =========================================
-   UPDATE ORDER STATUS (Shopkeeper)
-========================================= */
+/* UPDATE ORDER STATUS (Shopkeeper) */
 exports.updateOrderStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
@@ -285,10 +293,7 @@ exports.updateOrderStatus = async (req, res, next) => {
 };
 
 
-
-/* =========================================
-   CANCEL ORDER (Customer)
-========================================= */
+/* cancel order (Customer) */
 exports.cancelOrder = async (req, res, next) => {
   try {
     const order = await Order.findOne({
