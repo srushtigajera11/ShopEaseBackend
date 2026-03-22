@@ -80,12 +80,10 @@ exports.getAllBatches = async (req, res, next) => {
       isDelete: false,
     };
 
-    // filter by product
     if (product) {
       match.Product = { $in: product.split(",") };
     }
 
-    // low stock filter
     if (lowStock === "true") {
       match.remainingQty = { $lte: 5 };
     }
@@ -117,7 +115,6 @@ exports.getAllBatches = async (req, res, next) => {
   }
 ];
 
-    // expiring soon filter (within 7 days)
     if (expiringSoon === "true") {
       const today = new Date();
       const nextWeek = new Date();
@@ -130,7 +127,6 @@ exports.getAllBatches = async (req, res, next) => {
       });
     }
 
-    // search by product name
     if (search) {
   pipeline.push({
     $match: {
@@ -142,12 +138,12 @@ exports.getAllBatches = async (req, res, next) => {
   });
 }
 
-    // sorting
+
     const sortField = sortKey || "createdAt";
     const order = sortOrder === "asc" ? 1 : -1;
     pipeline.push({ $sort: { [sortField]: order } });
 
-    // pagination
+
     const skip = (page - 1) * limit;
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: Number(limit) });

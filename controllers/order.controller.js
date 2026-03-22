@@ -135,7 +135,6 @@ exports.getAllOrders = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, status, sortKey, sortOrder } = req.query;
 
-    // find shopkeeper products
     const products = await Product.find({
       shopkeeperId: req.user._id,
       isActive: true,
@@ -157,7 +156,6 @@ exports.getAllOrders = async (req, res, next) => {
     const pipeline = [
   { $match: match },
 
-  // join customer info
   {
     $lookup: {
       from: "users",
@@ -168,7 +166,6 @@ exports.getAllOrders = async (req, res, next) => {
   },
   { $unwind: "$customer" },
 
-  // join product info
   {
     $lookup: {
       from: "products",
@@ -201,7 +198,6 @@ exports.getAllOrders = async (req, res, next) => {
   }
 ];
 
-    // search
     if (search) {
       pipeline.push({
         $match: {
@@ -214,12 +210,12 @@ exports.getAllOrders = async (req, res, next) => {
       });
     }
 
-    // sorting
+
     const sortField = sortKey || "createdAt";
     const order = sortOrder === "asc" ? 1 : -1;
     pipeline.push({ $sort: { [sortField]: order } });
 
-    // pagination
+ 
     const skip = (page - 1) * limit;
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: Number(limit) });

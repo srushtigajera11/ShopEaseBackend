@@ -4,13 +4,11 @@ const AppError = require("./AppError");
 
 const sellFromBatches = async (productId, orderQty, session) => {
   let remainingOrderQty = orderQty;
-
-  // ✅ find batches sorted by expiry (FIFO)
   const batches = await Batch.find({
-    Product: productId,          // ✅ FIXED field name
+    Product: productId,          
     remainingQty: { $gt: 0 },
     expiryDate: { $gte: new Date() },
-    isDelete: false,             // ✅ soft delete safe
+    isDelete: false,             
     isActive: true,
   })
     .sort({ expiryDate: 1 })
@@ -36,7 +34,6 @@ const sellFromBatches = async (productId, orderQty, session) => {
     throw new AppError("Insufficient stock", 400);
   }
 
-  // ✅ update product total stock
   await Product.findByIdAndUpdate(
     productId,
     { $inc: { totalQuantity: -orderQty } },

@@ -37,9 +37,6 @@ exports.createProduct = async (req, res, next) => {
   }
 };
 
-/*  GET ALL PRODUCTS
-   (Customer → all active products)
-   (Shopkeeper → only own products)*/
 exports.getAllProducts = async (req, res, next) => {
   try {
     const {
@@ -57,12 +54,10 @@ exports.getAllProducts = async (req, res, next) => {
       isDelete: false,
     };
 
-    // shopkeeper sees only own products
     if (req.user.role === "shopkeeper") {
       match.shopkeeperId = req.user._id;
     }
 
-    // price filter
     if (minPrice || maxPrice) {
       match.price = {};
       if (minPrice) match.price.$gte = Number(minPrice);
@@ -71,7 +66,6 @@ exports.getAllProducts = async (req, res, next) => {
 
     const pipeline = [{ $match: match }];
 
-    // search
     if (search) {
       pipeline.push({
         $match: {
@@ -83,12 +77,11 @@ exports.getAllProducts = async (req, res, next) => {
       });
     }
 
-    // sorting
+   
     const sortField = sortKey || "createdAt";
     const order = sortOrder === "asc" ? 1 : -1;
     pipeline.push({ $sort: { [sortField]: order } });
 
-    // pagination
     const skip = (page - 1) * limit;
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: Number(limit) });
@@ -164,7 +157,6 @@ exports.deleteProduct = async (req, res, next) => {
       throw new AppError("Unauthorized", 403);
     }
 
-    // prevent delete if stock still exists
     const activeBatch = await Batch.exists({
       Product: product._id,
       remainingQty: { $gt: 0 },
